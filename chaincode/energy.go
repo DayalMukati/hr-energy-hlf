@@ -7,50 +7,154 @@ import (
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
 
-// SmartContract for energy trading
+// SmartContract provides functions for simple energy trading
 type SmartContract struct {
 	contractapi.Contract
 }
 
 // User represents an energy producer or consumer
 type User struct {
-	UserID   string `json:"UserID"`
-	UserType string `json:"UserType"` // "Producer" or "Consumer"
-	Balance  int    `json:"Balance"`
+	UserID     string `json:"userID"`
+	UserType   string `json:"userType"` // "Producer" or "Consumer"
+	Balance    int    `json:"balance"`
+	EnergyUnits int   `json:"energyUnits"`
 }
 
-// EnergyOffer represents an energy sale offer
-type EnergyOffer struct {
-	OfferID      string `json:"OfferID"`
-	ProducerID   string `json:"ProducerID"`
-	EnergyAmount int    `json:"EnergyAmount"` // kWh
-	Price        int    `json:"Price"`        // Token price
-	Sold         bool   `json:"Sold"`
-}
-
-// RegisterUser registers a new user (Producer or Consumer)
+// RegisterUser registers a new user with an initial token balance and energy units
 func (s *SmartContract) RegisterUser(ctx contractapi.TransactionContextInterface, userID string, userType string, balance int) error {
-	
+	exists, err := ctx.GetStub().GetState(userID)
+	if err != nil {
+		return fmt.Errorf("failed to check user existence: %v", err)
+	}
+	if exists != nil {
+		return fmt.Errorf("user already exists")
+	}
+
+	user := User{
+		UserID:     userID,
+		UserType:   userType,
+		Balance:    balance,
+		EnergyUnits: 0, // Start with zero energy
+	}
+
+	userJSON, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(userID, userJSON)
 }
 
-// CreateEnergyOffer creates a new energy sale offer
-func (s *SmartContract) CreateEnergyOffer(ctx contractapi.TransactionContextInterface, offerID string, producerID string, energyAmount int, price int) error {
-	
+// ProduceEnergy allows a producer to generate energy
+func (s *SmartContract) ProduceEnergy(ctx contractapi.TransactionContextInterface, producerID string, amount int) error {
+	producerJSON, err := ctx.GetStub().GetState(producerID)
+	if err != nil {
+		return fmt.Errorf("failed to read producer state: %v", err)
+	}
+	if producerJSON == nil {
+		return fmt.Errorf("producer does not exist")
+	}
+
+	var producer User
+	err = json.Unmarshal(producerJSON, &producer)
+	if err != nil {
+		return err
+	}
+
+	if producer.UserType != "Producer" {
+		return fmt.Errorf("only producers can generate energy")
+	}
+
+	producer.EnergyUnits += amount
+
+	updatedProducerJSON, err := json.Marshal(producer)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(producerID, updatedProducerJSON)
 }
 
-// BuyEnergy allows a consumer to purchase energy
-func (s *SmartContract) BuyEnergy(ctx contractapi.TransactionContextInterface, offerID string, consumerID string) error {
-	
+// TransferEnergy allows a consumer to buy energy from a producer using tokens
+func (s *SmartContract) TransferEnergy(ctx contractapi.TransactionContextInterface, producerID string, consumerID string, energyAmount int, tokenPrice int) error {
+	producerJSON, err := ctx.GetStub().GetState(producerID)
+	if err != nil {
+		return fmt.Errorf("failed to read producer state: %v", err)
+	}
+	if producerJSON == nil {
+		return fmt.Errorf("producer does not exist")
+	}
+
+	consumerJSON, err := ctx.GetStub().GetState(consumerID)
+	if err != nil {
+		return fmt.Errorf("failed to read consumer state: %v", err)
+	}
+	if consumerJSON == nil {
+		return fmt.Errorf("consumer does not exist")
+	}
+
+	var producer User
+	err = json.Unmarshal(producerJSON, &producer)
+	if err != nil {
+		return err
+	}
+
+	var consumer User
+	err = json.Unmarshal(consumerJSON, &consumer)
+	if err != nil {
+		return err
+	}
+
+	if producer.EnergyUnits < energyAmount {
+		return fmt.Errorf("producer does not have enough energy")
+	}
+
+	if consumer.Balance < tokenPrice {
+		return fmt.Errorf("consumer does not have enough tokens")
+	}
+
+	// Transfer energy and tokens
+	producer.EnergyUnits -= energyAmount
+	consumer.EnergyUnits += energyAmount
+	consumer.Balance -= tokenPrice
+	producer.Balance += tokenPrice
+
+	// Save updated states
+	producerJSON, err = json.Marshal(producer)
+	if err != nil {
+		return err
+	}
+
+	consumerJSON, err = json.Marshal(consumer)
+	if err != nil {
+		return err
+	}
+
+	err = ctx.GetStub().PutState(producerID, producerJSON)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(consumerID, consumerJSON)
 }
 
-// GetEnergyOffer retrieves an energy offer
-func (s *SmartContract) GetEnergyOffer(ctx contractapi.TransactionContextInterface, offerID string) (*EnergyOffer, error) {
-	
-}
+// GetUserDetails retrieves full user details
+func (s *SmartContract) GetUserDetails(ctx contractapi.TransactionContextInterface, userID string) (*User, error) {
+	userJSON, err := ctx.GetStub().GetState(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user state: %v", err)
+	}
+	if userJSON == nil {
+		return nil, fmt.Errorf("user does not exist")
+	}
 
-// GetUserBalance retrieves the balance of a user
-func (s *SmartContract) GetUserBalance(ctx contractapi.TransactionContextInterface, userID string) (int, error) {
-	
+	var user User
+	err = json.Unmarshal(userJSON, &user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
 }
 
 // Main function to start the chaincode
