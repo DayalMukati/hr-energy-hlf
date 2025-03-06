@@ -22,6 +22,7 @@ type User struct {
 
 // RegisterUser registers a new user with an initial token balance and energy units
 func (s *SmartContract) RegisterUser(ctx contractapi.TransactionContextInterface, userID string, userType string, balance int) error {
+	fmt.Printf("Registering user: %s\n", userID)
 	exists, err := ctx.GetStub().GetState(userID)
 	if err != nil {
 		return fmt.Errorf("failed to check user existence: %v", err)
@@ -41,12 +42,14 @@ func (s *SmartContract) RegisterUser(ctx contractapi.TransactionContextInterface
 	if err != nil {
 		return err
 	}
+	fmt.Printf("User: %s\n", userJSON)
 
 	return ctx.GetStub().PutState(userID, userJSON)
 }
 
 // ProduceEnergy allows a producer to generate energy
 func (s *SmartContract) ProduceEnergy(ctx contractapi.TransactionContextInterface, producerID string, amount int) error {
+	fmt.Printf("Producing energy: %s\n", producerID)
 	producerJSON, err := ctx.GetStub().GetState(producerID)
 	if err != nil {
 		return fmt.Errorf("failed to read producer state: %v", err)
@@ -71,6 +74,7 @@ func (s *SmartContract) ProduceEnergy(ctx contractapi.TransactionContextInterfac
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Producer: %s\n", updatedProducerJSON)
 
 	return ctx.GetStub().PutState(producerID, updatedProducerJSON)
 }
@@ -135,6 +139,7 @@ func (s *SmartContract) TransferEnergy(ctx contractapi.TransactionContextInterfa
 		return err
 	}
 
+	fmt.Printf("Producer: %s\n", producerJSON)
 	return ctx.GetStub().PutState(consumerID, consumerJSON)
 }
 
@@ -153,6 +158,7 @@ func (s *SmartContract) GetUserDetails(ctx contractapi.TransactionContextInterfa
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("User: %s\n", userJSON, user)
 
 	return &user, nil
 }
